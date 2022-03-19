@@ -1,40 +1,115 @@
 package logger
 
 import (
-	"fmt"
-	"path"
-	"runtime"
+	"time"
 
-	"github.com/sirupsen/logrus"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
-var e *logrus.Entry
+// Field ...
+type Field = zapcore.Field
 
-type Logger struct {
-	*logrus.Entry
+var (
+	// Int ..
+	Int = zap.Int
+	// String ...
+	String = zap.String
+	// Error ...
+	Error = zap.Error
+	// Bool ...
+	Bool = zap.Bool
+
+	// Any ...
+	Any = zap.Any
+)
+
+// Logger ...
+type Logger interface {
+	Debug(msg string, fields ...Field)
+	Info(msg string, fields ...Field)
+	Warn(msg string, fields ...Field)
+	Error(msg string, fields ...Field)
+	Fatal(msg string, fields ...Field)
 }
 
-func GetLogger() *Logger {
-	return &Logger{e}
+type loggerImpl struct {
+	zap *zap.Logger
 }
 
-func (l *Logger) GetLoggerWithField(k string, v interface{}) *Logger {
-	return &Logger{l.WithField(k, v)}
-}
+var (
+	customTimeFormat string
+)
 
-func init() {
-	l := logrus.New()
-	l.SetReportCaller(true)
-	l.Formatter = &logrus.TextFormatter{
-		CallerPrettyfier: func(frame *runtime.Frame) (function string, file string) {
-			filename := path.Base(frame.File)
-			return fmt.Sprintf("%s()", frame.Function), fmt.Sprintf("%s:%d", filename, frame.Line)
-		},
-		DisableColors: false,
-		FullTimestamp: true,
+// New ...
+func New(level string, namespace string) Logger {
+	if level == "" {
+		level = LevelInfo
 	}
 
-	l.SetLevel(logrus.WarnLevel)
+	logger := loggerImpl{
+		zap: newZapLogger(level, time.RFC3339),
+	}
 
-	e = logrus.NewEntry(l)
+	logger.zap = logger.zap.Named(namespace)
+
+	zap.RedirectStdLog(logger.zap)
+
+	return &logger
+}
+
+func (l *loggerImpl) Debug(msg string, fields ...Field) {
+	l.zap.Debug(msg, fields...)
+}
+
+func (l *loggerImpl) Info(msg string, fields ...Field) {
+	l.zap.Info(msg, fields...)
+}
+
+func (l *loggerImpl) Warn(msg string, fields ...Field) {
+	l.zap.Warn(msg, fields...)
+}
+
+func (l *loggerImpl) Error(msg string, fields ...Field) {
+	l.zap.Error(msg, fields...)
+}
+
+func (l *loggerImpl) Fatal(msg string, fields ...Field) {
+	l.zap.Fatal(msg, fields...)
+}
+
+// GetNamed ...
+func GetNamed(l Logger, name string) Logger {
+	switch v := l.(type) {
+	case *loggerImpl:
+		v.zap = v.zap.Named(name)
+		return v
+	default:
+		l.Info("logger.GetNamed: invalid logger type")
+		return l
+	}
+}
+
+// WithFields ...
+func WithFields(l Logger, fields ...Field) Logger {
+	switch v := l.(type) {
+	case *loggerImpl:
+		return &loggerImpl{
+			zap: v.zap.With(fields...),
+		}
+	default:
+		l.Info("logger.WithFields: invalid logger type")
+		return l
+	}
+}
+
+// Cleanup ...
+func Cleanup(l Logger) error {
+	switch v := l.(type) {
+	case *loggerImpl:
+		return v.zap.Sync()
+	default:
+		l.Info("logger.Cleanup: invalid logger type")
+		return nil
+	}
 }
