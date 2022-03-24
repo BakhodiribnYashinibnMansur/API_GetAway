@@ -1,8 +1,8 @@
 package services
 
 import (
-	"apiGetaway/config"
-	"apiGetaway/genproto/position_service"
+	"apiGateway/config"
+	"apiGateway/genproto/position_service"
 	"fmt"
 
 	"google.golang.org/grpc"
